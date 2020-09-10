@@ -1,5 +1,5 @@
 # Create Resource group
-$rg = "workflow-logic-app-demo2"
+$rg = "workflow-logic-app-demo"
 $loc = "uksouth"
 $storageaccountname = -join ((97..122) | Get-Random -Count 15 | % {[char]$_})
 
