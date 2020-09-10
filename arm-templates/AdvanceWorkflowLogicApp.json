@@ -1,0 +1,215 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "logicAppName": {
+            "defaultValue": "AdvanceWorkflowState",
+            "type": "String"
+        },
+         "connections_azuretables_name": {
+            "defaultValue": "azuretables",
+            "type": "String"
+        },
+        "LogicApp_ControlWorkflow_name": {
+            "defaultValue": "ControlWorkflow",
+            "type": "String"
+        }
+    },
+    "functions": [],
+    "variables": {},
+    "resources": [
+       {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('logicAppName')]",
+            "location": "uksouth",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "schema": {
+                                    "properties": {
+                                        "assignedTo": {
+                                            "type": "string"
+                                        },
+                                        "itemId": {
+                                            "type": "string"
+                                        },
+                                        "newState": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Condition": {
+                            "actions": {
+                                "Get_entity": {
+                                    "runAfter": {},
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                            }
+                                        },
+                                        "method": "get",
+                                        "path": "/Tables/@{encodeURIComponent('callbackurls')}/entities(PartitionKey='@{encodeURIComponent('1')}',RowKey='@{encodeURIComponent(triggerBody()?['itemId'])}')"
+                                    }
+                                },
+                                "HTTP": {
+                                    "runAfter": {
+                                        "Parse_JSON": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Http",
+                                    "inputs": {
+                                        "body": {
+                                            "assignedTo": "@{triggerBody()?['assignedTo']}",
+                                            "itemId": "@{triggerBody()?['itemId']}",
+                                            "newState": "@{triggerBody()?['newState']}"
+                                        },
+                                        "headers": {
+                                            "Content-Type": "application/json"
+                                        },
+                                        "method": "POST",
+                                        "uri": "@body('Parse_JSON')?['currentUrl']"
+                                    }
+                                },
+                                "Parse_JSON": {
+                                    "runAfter": {
+                                        "Get_entity": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@body('Get_entity')",
+                                        "schema": {
+                                            "properties": {
+                                                "currentUrl": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "WorkflowAdvanced_Response": {
+                                    "runAfter": {
+                                        "HTTP": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Response",
+                                    "kind": "Http",
+                                    "inputs": {
+                                        "statusCode": 204
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Get_entities": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "else": {
+                                "actions": {
+                                    "ControlWorkflow": {
+                                        "runAfter": {},
+                                        "type": "Workflow",
+                                        "inputs": {
+                                            "body": {
+                                                "itemId": "@triggerBody()?['itemId']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "[resourceId('Microsoft.Logic/workflows/', parameters('LogicApp_ControlWorkflow_name'))]"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "WorkflowCreated_Response": {
+                                        "runAfter": {
+                                            "ControlWorkflow": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Response",
+                                        "kind": "Http",
+                                        "inputs": {
+                                            "body": "@body('ControlWorkflow')",
+                                            "statusCode": 200
+                                        }
+                                    }
+                                }
+                            },
+                            "expression": {
+                                "and": [
+                                    {
+                                        "equals": [
+                                            "@length(body('Get_entities')?['value'])",
+                                            1
+                                        ]
+                                    }
+                                ]
+                            },
+                            "type": "If"
+                        },
+                        "Get_entities": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                    }
+                                },
+                                "method": "get",
+                                "path": "/Tables/@{encodeURIComponent('callbackurls')}/entities",
+                                "queries": {
+                                    "$filter": "RowKey eq '@{triggerBody()?['itemId']}'"
+                                }
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuretables": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]",
+                                "connectionName": "azuretables",
+                                "id": "[concat('/subscriptions/',subscription().subscriptionId,'/providers/Microsoft.Web/locations/uksouth/managedApis/azuretables')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "logicAppUrl": {
+            "type": "string",
+            "value": "[listCallbackURL(concat(resourceId('Microsoft.Logic/workflows/', parameters('logicAppName')), '/triggers/manual'), '2016-06-01').value]"
+        }
+    }
+}

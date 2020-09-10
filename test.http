@@ -1,28 +1,39 @@
 # Replace these values with the output of the setup.ps1 script
 
-@advanceWorkflowUrl=https://prod-09.uksouth.logic.azure.com:443/workflows/014c0d07132f418abc4f4852493ca1f7/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=8C6GUo2zmJdzFBIr3klt7ijq-HrfvrbGH0RIT-YfrmM
-@baseWorkflowUrl=https://prod-29.uksouth.logic.azure.com:443/workflows/d82907c4d38a42c0bdb6a3b5812348e1/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=s6zs2iRXHjG_97-GISMhMHRj9VZCGafG0b6WnaO-7iw
+@advanceWorkflowUrl=https://prod-26.uksouth.logic.azure.com:443/workflows/3d1e85c667ac47dabf94ed96500a143d/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=WPWkdwvp2OmMngLCwQRpLB_kNiwBfDUT3FkckqVd0wE
+# Call the Advance Workflow with an unknown id to start the state machine
 
-# Call the Base Workflow to start the state machine
-
-POST {{baseWorkflowUrl}}
+POST {{advanceWorkflowUrl}}
 Content-Type: application/json
 
 {
-    "itemId" : "1234"
+    "itemId" : "42"
 }
 
 ###
 
 # Call the Advance Workflow endpoint a couple of times to move through the 2 states and then have the base complete
 
+###
+
 POST {{advanceWorkflowUrl}}
 Content-Type: application/json
 
 {
-    "itemId" : "1234",
+    "itemId" : "42",
     "assignedTo" : "matt",
-    "newState": "STATE3"
+    "newState": "STAGE2"
+}
+
+###
+
+POST {{advanceWorkflowUrl}}
+Content-Type: application/json
+
+{
+    "itemId" : "42",
+    "assignedTo" : "matt",
+    "newState": "DONE"
 }
 
 

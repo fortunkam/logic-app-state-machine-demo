@@ -1,0 +1,360 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "logicAppName": {
+            "defaultValue": "ControlWorkflow",
+            "type": "String"
+        },
+         "connections_azuretables_name": {
+            "defaultValue": "azuretables",
+            "type": "String"
+        },
+         "subscriberLogicAppUrl": {
+            "type": "String"
+        }
+    },
+    "functions": [],
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('logicAppName')]",
+            "location": "uksouth",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "schema": {
+                                    "properties": {
+                                        "itemId": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Initialize_currentState": {
+                            "runAfter": {
+                                "Initialize_variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "currentState",
+                                        "type": "string",
+                                        "value": "CREATED"
+                                    }
+                                ]
+                            }
+                        },
+                        "Initialize_isComplete_flag": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "isComplete",
+                                        "type": "boolean",
+                                        "value": false
+                                    }
+                                ]
+                            }
+                        },
+                        "Initialize_variable": {
+                            "runAfter": {
+                                "Initialize_isComplete_flag": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "assignedTo",
+                                        "type": "string"
+                                    }
+                                ]
+                            }
+                        },
+                        "Log_the_CREATION_state": {
+                            "runAfter": {
+                                "Initialize_currentState": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": {
+                                    "actualAssignedTo": "@{variables('assignedTo')}",
+                                    "actualNewState": "@{variables('currentState')}",
+                                    "itemId": "@{triggerBody()?['itemId']}",
+                                    "oldAssignedTo": "",
+                                    "oldState": "",
+                                    "proposedAssignedTo": "",
+                                    "proposedState": ""
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                    }
+                                },
+                                "method": "patch",
+                                "path": "/Tables/@{encodeURIComponent('logs')}/entities(PartitionKey='@{encodeURIComponent(workflow().run.name)}',RowKey='@{encodeURIComponent('-1')}')"
+                            }
+                        },
+                        "Response": {
+                            "runAfter": {
+                                "Log_the_CREATION_state": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Response",
+                            "kind": "Http",
+                            "inputs": {
+                                "body": {
+                                    "itemId": "@{triggerBody()?['itemId']}",
+                                    "status": "item workflow created"
+                                },
+                                "statusCode": 200
+                            }
+                        },
+                        "Until": {
+                            "actions": {
+                                "HTTP_Webhook": {
+                                    "runAfter": {},
+                                    "type": "HttpWebhook",
+                                    "inputs": {
+                                        "subscribe": {
+                                            "body": {
+                                                "callbackUrl": "@{listCallbackUrl()}",
+                                                "itemId": "@{triggerBody()?['itemId']}",
+                                                "workflowName": "@{workflow().run.name}"
+                                            },
+                                            "method": "POST",
+                                            "uri": "[base64ToString(parameters('subscriberLogicAppUrl'))]"
+                                        },
+                                        "unsubscribe": {
+                                            "uri": "https://postb.in/1597998793068-2716046879068?unsub=true"
+                                        }
+                                    }
+                                },
+                                "Insert_or_Merge_Entity": {
+                                    "runAfter": {
+                                        "Switch": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "body": {
+                                            "actualAssignedTo": "@{variables('assignedTo')}",
+                                            "actualNewState": "@{variables('currentState')}"
+                                        },
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                            }
+                                        },
+                                        "method": "patch",
+                                        "path": "/Tables/@{encodeURIComponent('logs')}/entities(PartitionKey='@{encodeURIComponent(workflow().run.name)}',RowKey='@{encodeURIComponent(iterationIndexes('Until'))}')"
+                                    }
+                                },
+                                "Log_the_incoming_change": {
+                                    "runAfter": {
+                                        "Parse_JSON": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "body": {
+                                            "itemId": "@{body('Parse_JSON')?['itemId']}",
+                                            "oldAssignedTo": "@{variables('assignedTo')}",
+                                            "oldState": "@{variables('currentState')}",
+                                            "proposedAssignedTo": "@{body('Parse_JSON')?['assignedTo']}",
+                                            "proposedState": "@{body('Parse_JSON')?['newState']}"
+                                        },
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                            }
+                                        },
+                                        "method": "patch",
+                                        "path": "/Tables/@{encodeURIComponent('logs')}/entities(PartitionKey='@{encodeURIComponent(workflow().run.name)}',RowKey='@{encodeURIComponent(iterationIndexes('Until'))}')"
+                                    }
+                                },
+                                "Parse_JSON": {
+                                    "runAfter": {
+                                        "HTTP_Webhook": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@body('HTTP_Webhook')",
+                                        "schema": {
+                                            "properties": {
+                                                "assignedTo": {
+                                                    "type": "string"
+                                                },
+                                                "itemId": {
+                                                    "type": "string"
+                                                },
+                                                "newState": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "Set_the_assignedTo_variable": {
+                                    "runAfter": {
+                                        "Log_the_incoming_change": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "assignedTo",
+                                        "value": "@body('Parse_JSON')?['assignedTo']"
+                                    }
+                                },
+                                "Switch": {
+                                    "runAfter": {
+                                        "Set_the_assignedTo_variable": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "cases": {
+                                        "Case": {
+                                            "case": "CREATED",
+                                            "actions": {
+                                                "Set_variable": {
+                                                    "runAfter": {},
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "currentState",
+                                                        "value": "STAGE2"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "Case_2": {
+                                            "case": "STAGE2",
+                                            "actions": {
+                                                "STAGE2_-_IsComplete_to_true": {
+                                                    "runAfter": {},
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "isComplete",
+                                                        "value": true
+                                                    }
+                                                },
+                                                "STAGE2_-_Set_currentState_to_COMPLETED": {
+                                                    "runAfter": {
+                                                        "STAGE2_-_IsComplete_to_true": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "currentState",
+                                                        "value": "COMPLETED"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "default": {
+                                        "actions": {
+                                            "DEFAULT_-_IsComplete_to_true": {
+                                                "runAfter": {},
+                                                "type": "SetVariable",
+                                                "inputs": {
+                                                    "name": "isComplete",
+                                                    "value": true
+                                                }
+                                            },
+                                            "Insert_or_Replace_Entity": {
+                                                "runAfter": {
+                                                    "DEFAULT_-_IsComplete_to_true": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "ApiConnection",
+                                                "inputs": {
+                                                    "body": {
+                                                        "message": "UNKNOWN State of @{variables('currentState')}, stopping workflow"
+                                                    },
+                                                    "host": {
+                                                        "connection": {
+                                                            "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                                        }
+                                                    },
+                                                    "method": "put",
+                                                    "path": "/Tables/@{encodeURIComponent('errors')}/entities(PartitionKey='@{encodeURIComponent(workflow().run.name)}',RowKey='@{encodeURIComponent(guid())}')"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "expression": "@variables('currentState')",
+                                    "type": "Switch"
+                                }
+                            },
+                            "runAfter": {
+                                "Response": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "expression": "@equals(variables('isComplete'), true)",
+                            "limit": {
+                                "count": 60,
+                                "timeout": "PT1H"
+                            },
+                            "type": "Until"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuretables": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]",
+                                "connectionName": "azuretables",
+                                "id": "[concat('/subscriptions/',subscription().subscriptionId,'/providers/Microsoft.Web/locations/uksouth/managedApis/azuretables')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "logicAppUrl": {
+            "type": "string",
+            "value": "[listCallbackURL(concat(resourceId('Microsoft.Logic/workflows/', parameters('logicAppName')), '/triggers/manual'), '2016-06-01').value]"
+        }
+    }
+}

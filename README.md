@@ -4,7 +4,7 @@ To build the environment run the script in setup.ps1
 
 You will end up with a resource group containing 3 logic apps, a storage account and a logic app connection to table storage.
 
-When the script is completed you will have 2 urls.  One to start the workflow, the other to advance it through the states.
+When the script is completed you will have a url for one of the logic apps.  This can be dropped into the test.http script (uses the RestClient extension in VSCode to run).
 
 The logic apps are...
 The Base Workflow is the state machine
