@@ -1,6 +1,6 @@
 # Replace these values with the output of the setup.ps1 script
 
-@advanceWorkflowUrl=https://prod-26.uksouth.logic.azure.com:443/workflows/3d1e85c667ac47dabf94ed96500a143d/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=WPWkdwvp2OmMngLCwQRpLB_kNiwBfDUT3FkckqVd0wE
+@advanceWorkflowUrl=https://prod-20.uksouth.logic.azure.com:443/workflows/16cd5ad5c77e4970b69c228e24a5c3f7/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=KzNGVm-NaMjC2wZ8T0lmwHyT3AQz9yeedZVbJJLZYG8
 # Call the Advance Workflow with an unknown id to start the state machine
 
 POST {{advanceWorkflowUrl}}
